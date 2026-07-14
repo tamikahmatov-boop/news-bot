@@ -8,7 +8,7 @@ from typing import List, Dict, Optional
 import json
 from config import (
     NEWS_SOURCES, HIGH_IMPACT_KEYWORDS, MEDIUM_IMPACT_KEYWORDS,
-    CACHE_DURATION_HOURS, MONITORED_COINS, LOG_FILE, LOG_LEVEL
+    CACHE_DURATION_HOURS, LOG_FILE, LOG_LEVEL
 )
 
 # Setup logging
@@ -106,23 +106,23 @@ class NewsTracker:
 
         return impact_score
 
-    def extract_mentioned_coins(self, text: str) -> List[str]:
+    def extract_mentioned_coins(self, text: str, all_monitored_coins: List[str]) -> List[str]:
         """Extract coin names mentioned in the news"""
         mentioned = []
         text_upper = text.upper()
 
-        for coin in MONITORED_COINS:
+        for coin in all_monitored_coins:
             if coin in text_upper:
                 mentioned.append(coin)
 
         return list(set(mentioned))  # Remove duplicates
 
-    def is_news_relevant(self, title: str, description: str) -> bool:
+    def is_news_relevant(self, title: str, description: str, all_monitored_coins: List[str]) -> bool:
         """Check if news is relevant to monitored coins"""
         text = (title + " " + description).lower()
 
         # Check if any monitored coin is mentioned
-        for coin in MONITORED_COINS:
+        for coin in all_monitored_coins:
             if coin.lower() in text:
                 return True
 
@@ -130,7 +130,8 @@ class NewsTracker:
         general_keywords = [
             "bitcoin", "ethereum", "crypto", "blockchain",
             "sec", "regulation", "fed", "interest rate",
-            "bull market", "bear market", "crash", "rally"
+            "bull market", "bear market", "crash", "rally",
+            "futures", "derivatives", "exchange",
         ]
         for keyword in general_keywords:
             if keyword in text:
@@ -138,7 +139,7 @@ class NewsTracker:
 
         return False
 
-    def process_news(self, coin: str) -> List[Dict]:
+    def process_news(self, coin: str, all_monitored_coins: List[str]) -> List[Dict]:
         """
         Process and filter news for a specific coin
         Returns list of news with impact scores
@@ -164,14 +165,14 @@ class NewsTracker:
                 continue
 
             # Check relevance
-            if not self.is_news_relevant(title, description):
+            if not self.is_news_relevant(title, description, all_monitored_coins):
                 continue
 
             # Calculate impact
             impact_score = self.calculate_impact_score(title, description)
 
             # Check mentioned coins
-            mentioned_coins = self.extract_mentioned_coins(title + " " + description)
+            mentioned_coins = self.extract_mentioned_coins(title + " " + description, all_monitored_coins)
 
             result = {
                 "id": news_id,
@@ -207,7 +208,3 @@ class NewsTracker:
 
         if old_ids:
             logger.info(f"Cleaned {len(old_ids)} old news from cache")
-
-    def get_monitored_coins(self) -> List[str]:
-        """Return list of monitored coins"""
-        return MONITORED_COINS.copy()
