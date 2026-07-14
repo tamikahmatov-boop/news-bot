@@ -1,5 +1,6 @@
 # Main Bot Module
 # Orchestrates news tracking and Telegram notifications
+# Monitors ALL Bybit futures trading pairs
 
 import asyncio
 import logging
@@ -7,9 +8,10 @@ from datetime import datetime
 from typing import List, Dict
 import requests
 from news_tracker import NewsTracker
+from bybit_manager import BybitManager
 from config import (
     TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, IMPACT_THRESHOLD,
-    SCAN_INTERVAL_SECONDS, MONITORED_COINS, LOG_FILE, LOG_LEVEL
+    SCAN_INTERVAL_SECONDS, LOG_FILE, LOG_LEVEL
 )
 
 # Setup logging
@@ -25,12 +27,25 @@ logger = logging.getLogger(__name__)
 
 
 class NewsBot:
-    """Main bot that tracks news and sends notifications"""
+    """Main bot that tracks news for ALL Bybit futures coins and sends notifications"""
 
     def __init__(self):
         self.tracker = NewsTracker()
+        self.bybit = BybitManager()
         self.is_running = False
         self.sent_notifications = set()
+        self.monitored_coins = []
+        self.last_coin_update = None
+
+    def load_monitored_coins(self):
+        """Load all available futures coins from Bybit"""
+        logger.info("Loading Bybit futures coins...")
+        coins = self.bybit.get_all_futures_coins()
+        self.monitored_coins = coins
+        self.last_coin_update = datetime.now()
+        logger.info(f"✅ Loaded {len(coins)} futures coins from Bybit")
+        logger.info(f"Sample coins: {', '.join(coins[:15])}...")
+        return coins
 
     def _format_impact_bar(self, score: int) -> str:
         """Create visual impact bar (0-10 scale)"""
@@ -44,10 +59,10 @@ class NewsBot:
         impact_bar = self._format_impact_bar(news_item["impact_score"])
 
         message = (
-            f"📰 <b>НОВОСТЬ О {news_item['coin']}</b>\n\n"
+            f"📰 <b>ФЬЮЧЕРС НОВОСТЬ О {news_item['coin']}USDT</b>\n\n"
             f"<b>Заголовок:</b> {news_item['title']}\n\n"
             f"<b>Описание:</b> {news_item['description'][:200]}...\n\n"
-            f"<b>Уровень влияния на манету:</b>\n"
+            f"<b>Уровень влияния на цену:</b>\n"
             f"{impact_bar} {news_item['impact_score']}/10\n\n"
         )
 
@@ -93,7 +108,7 @@ class NewsBot:
 
         for coin in coins:
             try:
-                news_items = self.tracker.process_news(coin)
+                news_items = self.tracker.process_news(coin, self.monitored_coins)
                 all_news.extend(news_items)
             except Exception as e:
                 logger.error(f"Error processing news for {coin}: {e}")
@@ -128,12 +143,20 @@ class NewsBot:
             else:
                 logger.warning(f"Failed to send notification for: {news_item['title'][:50]}")
 
+    async def refresh_coins_list(self):
+        """Periodically refresh the list of monitored coins from Bybit"""
+        # Refresh every 6 hours
+        if (self.last_coin_update is None or 
+            (datetime.now() - self.last_coin_update).seconds > 21600):
+            logger.info("Refreshing coins list from Bybit...")
+            self.load_monitored_coins()
+
     async def scan_news(self):
-        """Scan news for all monitored coins"""
-        logger.info("Starting news scan...")
+        """Scan news for all monitored coins from Bybit futures"""
+        logger.info(f"Starting news scan for {len(self.monitored_coins)} futures coins...")
 
         # Process news for all monitored coins
-        all_news = self.process_news_batch(MONITORED_COINS)
+        all_news = self.process_news_batch(self.monitored_coins)
         logger.info(f"Total news items found: {len(all_news)}")
 
         # Filter by impact threshold
@@ -148,18 +171,26 @@ class NewsBot:
 
     async def run(self):
         """Main bot loop"""
-        logger.info("=" * 50)
-        logger.info("NEWS BOT STARTED")
-        logger.info(f"Monitoring coins: {', '.join(MONITORED_COINS)}")
+        logger.info("=" * 60)
+        logger.info("🤖 BYBIT FUTURES NEWS BOT STARTED")
+        logger.info("=" * 60)
+
+        # Load initial coins list
+        self.load_monitored_coins()
+
         logger.info(f"Impact threshold: {IMPACT_THRESHOLD}/10")
         logger.info(f"Scan interval: {SCAN_INTERVAL_SECONDS} seconds")
-        logger.info("=" * 50)
+        logger.info("=" * 60)
 
         self.is_running = True
 
         try:
             while self.is_running:
                 try:
+                    # Refresh coins list periodically
+                    await self.refresh_coins_list()
+                    
+                    # Scan for news
                     await self.scan_news()
                 except Exception as e:
                     logger.error(f"Error in main loop: {e}")
