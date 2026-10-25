@@ -26,8 +26,8 @@
 # ---------------------------------------------------------------------------
 # Bybit — один аккаунт для торговли И для чтения статистики
 # ---------------------------------------------------------------------------
-API_KEY = "woiSv4KX90TuCdq6cJ"
-API_SECRET = "kRWXuYfI83E2xOHVzgo4Tymhnuut0a0PjZer"
+API_KEY = "ZXgv9c4769PLtMGPH3"
+API_SECRET = "6JU2A32XAut5L44Hb2lzHqAFWXcYKNBYYU1u"
 TESTNET = False                 # True = testnet.bybit.com (нужны отдельные ключи)
 CATEGORY = "linear"             # USDT-перпетуалы
 QUOTE_COIN = "USDT"
